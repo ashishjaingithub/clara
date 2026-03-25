@@ -1,12 +1,25 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
+
+// ── agent-core Mock — prevent real API calls ──────────────────────────────
+vi.mock('@agenticlearning/agent-core', () => ({
+  getAvailableSlots: vi.fn(),
+  bookAppointment: vi.fn(),
+  upsertContact: vi.fn(),
+}))
 
 // ── LLM Mock ──────────────────────────────────────────────────────────────
+// bindTools returns an object with invoke so the tool-calling agent loop works
 const mockInvoke = vi.fn()
 vi.mock('@langchain/groq', () => ({
   ChatGroq: class {
     invoke = mockInvoke
+    bindTools = () => ({ invoke: mockInvoke })
   },
 }))
+
+beforeAll(() => {
+  process.env.SIMULATE_APIS = 'true'
+})
 
 // ── LangSmith Mock ────────────────────────────────────────────────────────
 vi.mock('langsmith/traceable', () => ({

@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@agenticlearning/agent-core": "file:../packages/agent-core",
     "@langchain/core": "^1.1.31",
     "@langchain/groq": "^1.1.5",
     "@types/nodemailer": "^7.0.11",

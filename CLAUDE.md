@@ -1,6 +1,6 @@
 # Clara — AI Receptionist
 
-**Phase:** Explore
+**Phase:** Iterate
 
 ## Project Overview
 
@@ -57,6 +57,9 @@ open http://localhost:3002/demo/<sessionId>
 # Unit tests (fast, all externals mocked)
 npm run test
 
+# With coverage (thresholds enforced)
+npm run test -- --coverage
+
 # Watch mode
 npm run test:watch
 
@@ -64,7 +67,8 @@ npm run test:watch
 npm run typecheck
 ```
 
-**No coverage thresholds** — Explore phase. Tests exist to give confidence, not enforce gates.
+**Coverage thresholds (Iterate phase):** statements 70%, branches 60%, functions 70%, lines 70%.
+CI blocks merge if thresholds are not met.
 
 ---
 
@@ -122,9 +126,19 @@ clara/
 | `GROQ_MODEL` | No | `llama-3.1-8b-instant` | Override the Groq model |
 | `PORT` | No | `3002` | App port |
 | `NODE_ENV` | No | `development` | Environment |
+| `SIMULATE_APIS` | No | `false` | Set `true` in tests to mock all external APIs |
+| `HUBSPOT_ACCESS_TOKEN` | No* | — | HubSpot private app token (shared from root `.env`) |
+| `GOOGLE_SERVICE_ACCOUNT_KEY_PATH` | No* | — | Path to Google service account JSON (shared from root `.env`) |
+| `GOOGLE_CALENDAR_ID` | No* | — | Target calendar for bookings (shared from root `.env`) |
+| `BUSINESS_TIMEZONE` | No | `America/Los_Angeles` | Default timezone for slot generation |
+| `CLARA_CONFIRM_BOOKING` | No* | — | Set `true` to enable calendar booking outside local dev (Tier 3 HITL gate) |
+| `CLARA_CONFIRM_HUBSPOT_WRITE` | No* | — | Set `true` to enable HubSpot writes outside local dev (Tier 3 HITL gate) |
 
-> **`HUNTER_API_URL` and `HUNTER_API_KEY` are required for the chat agent to return personalized
-> responses.** Without them, Clara operates in generic fallback mode.
+> *Required in production. In development (`NODE_ENV=development`), HITL gates are bypassed automatically.
+> Set `SIMULATE_APIS=true` in tests — all external API calls are mocked.
+
+> **Shared credentials** (`HUBSPOT_ACCESS_TOKEN`, `GOOGLE_SERVICE_ACCOUNT_KEY_PATH`, `GOOGLE_CALENDAR_ID`)
+> are defined once in the root `.env` and symlinked or copied to each project.
 
 ---
 
@@ -160,12 +174,14 @@ Get full message history for a session.
 
 ---
 
-## Definition of Done (Explore Phase)
+## Definition of Done (Iterate Phase)
 
-- [ ] Unit tests pass: `npm run test`
+- [ ] Unit tests pass with coverage thresholds met: `npm run test -- --coverage`
 - [ ] No TypeScript errors: `npm run typecheck`
 - [ ] New agent logic has at least one happy path + one error path test
 - [ ] No hardcoded secrets
+- [ ] All external API calls behind `SIMULATE_APIS` guard in tests
+- [ ] New Tier 3 actions registered in `.claude/rules/hitl-gate-exact-string.md`
 
 ---
 
@@ -179,4 +195,4 @@ Get full message history for a session.
 
 ---
 
-*Clara CLAUDE.md v1.0 — 2026-03-23*
+*Clara CLAUDE.md v2.0 — 2026-03-24 (Iterate phase promotion — ADR-0017)*

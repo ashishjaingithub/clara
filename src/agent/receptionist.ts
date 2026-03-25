@@ -1,6 +1,9 @@
 import { ChatGroq } from '@langchain/groq'
-import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages'
+import { HumanMessage, AIMessage, SystemMessage, ToolMessage } from '@langchain/core/messages'
+import type { BaseMessage } from '@langchain/core/messages'
 import { traceable, getCurrentRunTree } from 'langsmith/traceable'
+import type { EnrichmentProfile } from '@agenticlearning/agent-core'
+import { createClaraTools } from './tools'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,6 +36,7 @@ export interface ReceptionistInput {
   message: string
   history: MessageHistoryItem[]
   businessProfile?: BusinessProfile
+  enrichmentProfile?: EnrichmentProfile
 }
 
 export interface ReceptionistResult {
@@ -196,12 +200,18 @@ export function buildSystemPrompt(profile: BusinessProfile): string {
     '',
     'YOUR ROLE: Answer visitor questions about this business naturally and helpfully. You are the first point of contact — warm, knowledgeable, and efficient.',
     '',
+    'TOOLS AVAILABLE:',
+    '- get_available_slots: Call this when a visitor wants to see open appointment times',
+    '- book_appointment: Call this ONLY after a visitor confirms a specific slot (requires email + name)',
+    '- upsert_contact: Call this when a visitor shares contact details and wants follow-up',
+    '- get_enrichment_details: Call this to review full business details if needed',
+    '',
     'ABOUT THIS BUSINESS:',
     ...businessDetails,
     '',
     'HOW TO RESPOND:',
     '- Keep answers brief and conversational (2-3 sentences for simple questions)',
-    "- If you don't know something specific (like current availability or exact pricing), say so honestly and offer to connect them with the team",
+    "- If you don't know something specific (like current availability or exact pricing), use get_available_slots or say so honestly and offer to connect them with the team",
     '- After 3+ exchanges, naturally offer to have someone follow up',
     '- Never say "I\'d be happy to help", "Certainly!", or "Of course!" — just answer directly',
     '- Use the business name occasionally but not in every message',
@@ -215,22 +225,124 @@ export function buildSystemPrompt(profile: BusinessProfile): string {
   return lines.join('\n')
 }
 
+// ─── Reply Content Extractor ──────────────────────────────────────────────────
+
+function extractReplyText(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) {
+    return content
+      .map((c: unknown) => {
+        if (typeof c === 'string') return c
+        if (
+          typeof c === 'object' &&
+          c !== null &&
+          'text' in c &&
+          typeof (c as Record<string, unknown>).text === 'string'
+        ) {
+          return (c as Record<string, unknown>).text as string
+        }
+        return ''
+      })
+      .join('')
+  }
+  return 'I apologize, I had trouble generating a response. Please try again.'
+}
+
+// ─── Tool-Calling Agent Loop ──────────────────────────────────────────────────
+
+/** Maximum number of tool-calling iterations before bailing out. */
+const MAX_TOOL_ITERATIONS = 5
+
+/**
+ * Runs one pass of the tool-calling agent loop.
+ * Returns the final text reply after all tool calls are resolved.
+ */
+async function runAgentLoop(
+  llm: ReturnType<typeof ChatGroq.prototype.bindTools>,
+  messages: BaseMessage[],
+  toolMap: Map<string, (input: Record<string, unknown>) => Promise<string>>,
+): Promise<string> {
+  const currentMessages = [...messages]
+
+  for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
+    const response = await llm.invoke(currentMessages)
+    currentMessages.push(response)
+
+    // Check if the model wants to call tools
+    const toolCalls = response.tool_calls
+    if (!toolCalls || toolCalls.length === 0) {
+      // No tool calls — this is the final text response
+      return extractReplyText(response.content)
+    }
+
+    // Execute all requested tool calls in parallel
+    const toolResults = await Promise.all(
+      toolCalls.map(async (tc) => {
+        const toolFn = toolMap.get(tc.name)
+        if (!toolFn) {
+          return new ToolMessage({
+            tool_call_id: tc.id ?? tc.name,
+            content: `Tool "${tc.name}" is not available.`,
+          })
+        }
+        try {
+          const result = await toolFn(tc.args as Record<string, unknown>)
+          return new ToolMessage({
+            tool_call_id: tc.id ?? tc.name,
+            content: result,
+          })
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          return new ToolMessage({
+            tool_call_id: tc.id ?? tc.name,
+            content: `Tool error: ${msg}`,
+          })
+        }
+      }),
+    )
+
+    // Add all tool results to the message history
+    for (const tr of toolResults) {
+      currentMessages.push(tr)
+    }
+  }
+
+  // Exceeded max iterations — return a safe fallback
+  return 'I apologize, I had trouble completing your request. Please try again or contact the business directly.'
+}
+
 // ─── Core Agent Function ──────────────────────────────────────────────────────
 
 async function _runReceptionist(input: ReceptionistInput): Promise<ReceptionistResult> {
   const profile = input.businessProfile ?? (await fetchBusinessProfile(input.hubspotCompanyId))
 
   const modelName = process.env.GROQ_MODEL ?? 'llama-3.3-70b-versatile'
-  const llm = new ChatGroq({
+  const baseLlm = new ChatGroq({
     model: modelName,
     temperature: 0.7,
     maxTokens: 512,
     apiKey: process.env.GROQ_API_KEY,
   })
 
+  // Build tools from the enrichment profile (or null if not provided)
+  const enrichmentProfile = input.enrichmentProfile ?? null
+  const tools = createClaraTools(enrichmentProfile)
+  const llmWithTools = baseLlm.bindTools(tools)
+
+  // Build a tool lookup map for the agent loop
+  const toolMap = new Map<string, (input: Record<string, unknown>) => Promise<string>>(
+    tools.map((t) => [
+      t.name,
+      async (toolInput: Record<string, unknown>) => {
+        const result = await t.invoke(toolInput)
+        return typeof result === 'string' ? result : String(result)
+      },
+    ]),
+  )
+
   const systemPrompt = buildSystemPrompt(profile)
 
-  const messages = [
+  const messages: BaseMessage[] = [
     new SystemMessage(systemPrompt),
     ...input.history.map((m) =>
       m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content),
@@ -238,22 +350,7 @@ async function _runReceptionist(input: ReceptionistInput): Promise<ReceptionistR
     new HumanMessage(input.message),
   ]
 
-  const response = await llm.invoke(messages)
-
-  const reply =
-    typeof response.content === 'string'
-      ? response.content
-      : Array.isArray(response.content)
-        ? response.content
-            .map((c: unknown) => {
-              if (typeof c === 'string') return c
-              if (typeof c === 'object' && c !== null && 'text' in c && typeof (c as Record<string, unknown>).text === 'string') {
-                return (c as Record<string, unknown>).text as string
-              }
-              return ''
-            })
-            .join('')
-        : 'I apologize, I had trouble generating a response. Please try again.'
+  const reply = await runAgentLoop(llmWithTools, messages, toolMap)
 
   // Capture LangSmith trace ID — available only when LANGSMITH_TRACING=true and SDK is active.
   // getCurrentRunTree() returns null/undefined outside a traceable context or in test mode.
@@ -273,6 +370,7 @@ async function _runReceptionist(input: ReceptionistInput): Promise<ReceptionistR
  * Clara receptionist agent, wrapped with LangSmith traceable for observability.
  *
  * On first call (no businessProfile provided) it fetches the profile from Hunter.
+ * Optionally accepts an enrichmentProfile to power tool-calling (calendar + HubSpot).
  * Returns the assistant reply, the resolved business profile, and the LangSmith trace ID.
  *
  * Tracing behaviour:
@@ -284,7 +382,7 @@ export const runReceptionist = traceable(
   {
     name: 'clara-receptionist',
     project_name: process.env.LANGSMITH_PROJECT ?? `clara-${process.env.NODE_ENV ?? 'development'}`,
-    tags: ['v1', 'chat'],
+    tags: ['v2', 'tool-calling'],
   },
 )
 

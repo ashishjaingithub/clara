@@ -24,7 +24,12 @@ export default defineConfig({
         'src/app/layout.tsx',
         'src/app/page.tsx',
       ],
-      // No coverage thresholds — Explore phase
+      thresholds: {
+        statements: 70,
+        branches: 60,
+        functions: 70,
+        lines: 70,
+      },
     },
   },
   resolve: {
