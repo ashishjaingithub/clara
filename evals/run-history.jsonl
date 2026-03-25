@@ -1,0 +1,1 @@
+{"run_id":"build-2026-03-24","project":"clara","phase":"build","timestamp":"2026-03-24T00:00:00Z","overall_score":0.94,"passed":true,"test_count":78,"typescript_errors":0,"chaos_score":1.0,"sprint_0_complete":true,"sprint_1_complete":true,"docs_complete":true,"security_findings":{"critical":0,"high":0,"medium":1,"low":1}}

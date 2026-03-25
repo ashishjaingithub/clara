@@ -1,0 +1,100 @@
+{
+  "run_id": "build-2026-03-24",
+  "project": "clara",
+  "phase": "build",
+  "explore_phase": true,
+  "timestamp": "2026-03-24T00:00:00Z",
+  "scores": {
+    "test_coverage": 1.00,
+    "test_strength": 1.00,
+    "typescript": 1.00,
+    "security": 0.80,
+    "sprint_completion": 0.90,
+    "documentation": 1.00,
+    "code_quality": 0.90
+  },
+  "weights": {
+    "test_coverage": 0.20,
+    "test_strength": 0.15,
+    "typescript": 0.15,
+    "security": 0.20,
+    "sprint_completion": 0.15,
+    "documentation": 0.10,
+    "code_quality": 0.05
+  },
+  "overall_score": 0.94,
+  "passed": true,
+  "test_count": 78,
+  "test_files": 6,
+  "tests_expected": 78,
+  "typescript_errors": 0,
+  "lint_errors": 0,
+  "missing_testid_violations": 0,
+  "console_log_in_production_code": 1,
+  "hardcoded_secrets": 0,
+  "security_findings": {
+    "critical": 0,
+    "high": 0,
+    "medium": 1,
+    "low": 1
+  },
+  "security_findings_detail": {
+    "medium": "startup.ts checkProductionEnv has no test coverage — silent refactor risk",
+    "low": "Railway IP extraction test directionally ambiguous (leftmost vs rightmost)"
+  },
+  "chaos_score": 1.0,
+  "chaos_mutations_caught": 3,
+  "chaos_mutations_total": 3,
+  "chaos_security_checks_covered": 2,
+  "chaos_security_checks_total": 3,
+  "chaos_security_gap": "startup.ts production env enforcement untested",
+  "sprint_0_complete": true,
+  "sprint_1_complete": true,
+  "sprint_1_note": "7 of 8 FE-001 components confirmed; ChatArea and WelcomeMessage unconfirmed",
+  "docs_complete": true,
+  "docs_present": ["README.md", "API.md", "RUNBOOK.md", "SECURITY.md", "DEPLOYMENT.md", "CLAUDE.md"],
+  "components_present": 7,
+  "components_expected": 8,
+  "operator_auth_implemented": true,
+  "operator_auth_mechanism": "crypto.timingSafeEqual via SHA-256 hash comparison",
+  "rate_limiting_implemented": true,
+  "rate_limiting_mechanism": "in-memory sliding window, clock injection for testability",
+  "prompt_injection_defense": true,
+  "idor_prevention": true,
+  "langsmith_tracing_wired": true,
+  "langchain_langgraph_removed": true,
+  "open_items": [
+    {
+      "id": "startup-test",
+      "priority": "high",
+      "description": "Write startup.ts test coverage for checkProductionEnv — test template provided by chaos agent",
+      "file": "src/__tests__/unit/lib/startup.test.ts",
+      "blocker_for": "extract_promotion"
+    },
+    {
+      "id": "route-handler-tests",
+      "priority": "medium",
+      "description": "Add integration tests for /api/chat, /api/demo, /api/leads, /api/admin/cleanup route handlers",
+      "blocker_for": "extract_promotion"
+    },
+    {
+      "id": "ip-extraction-test",
+      "priority": "low",
+      "description": "Add rightmost-trust Railway IP test to rate-limit.test.ts to disambiguate directional intent",
+      "blocker_for": "none"
+    },
+    {
+      "id": "chatarea-component",
+      "priority": "low",
+      "description": "Confirm ChatArea.tsx and WelcomeMessage.tsx presence or document inline implementation in DemoPageClient",
+      "blocker_for": "none"
+    }
+  ],
+  "langfuse_compatible": true,
+  "langfuse_metadata": {
+    "project": "clara",
+    "run_type": "build_eval",
+    "model": "claude-sonnet-4-6",
+    "evaluator": "eval-agent"
+  }
+}

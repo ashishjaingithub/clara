@@ -1,0 +1,50 @@
+{
+  "name": "clara",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Clara — AI Receptionist for local SMBs",
+  "scripts": {
+    "dev": "next dev -p 3002",
+    "build": "next build",
+    "start": "next start -p 3002",
+    "lint": "next lint",
+    "test": "mkdir -p coverage/.tmp && vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.1.31",
+    "@langchain/groq": "^1.1.5",
+    "@types/nodemailer": "^7.0.11",
+    "better-sqlite3": "^11.8.1",
+    "drizzle-orm": "^0.40.0",
+    "googleapis": "^171.4.0",
+    "langsmith": "^0.2.0",
+    "next": "^14.2.35",
+    "nodemailer": "^8.0.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "uuid": "^11.1.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.13.9",
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
+    "@types/uuid": "^10.0.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "autoprefixer": "^10.4.21",
+    "drizzle-kit": "^0.30.4",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "14.2.29",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

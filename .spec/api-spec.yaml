@@ -1,0 +1,779 @@
+openapi: "3.1.0"
+
+info:
+  title: Clara API
+  version: "1.0.0"
+  description: |
+    Clara — AI Chat Receptionist for Local SMBs.
+
+    ## Auth Model
+
+    **Operator endpoints** require a static bearer token:
+    `Authorization: Bearer <CLARA_OPERATOR_API_KEY>`
+
+    **Visitor endpoints** require a valid session UUID in the request body or query params.
+    The UUID is the capability token. No user authentication exists.
+
+    ## Rate Limiting
+
+    All endpoints enforce in-memory sliding window rate limits.
+    Rate limit violations return HTTP 429 with `Retry-After: 60`.
+
+    | Endpoint | Limit | Window |
+    |----------|-------|--------|
+    | POST /api/chat | 10 req/min/IP | 60s |
+    | GET /api/chat | 30 req/min/IP | 60s |
+    | POST /api/demo | 10 req/min/IP | 60s |
+    | GET /api/demo | 30 req/min/IP | 60s |
+    | POST /api/leads | 5 req/min/IP | 60s |
+    | GET /api/leads | 20 req/min/IP | 60s |
+    | DELETE /api/leads/{id} | 20 req/min/IP | 60s |
+    | POST /api/admin/cleanup | 2 req/min/IP | 60s |
+
+servers:
+  - url: http://localhost:3002
+    description: Local development
+  - url: https://clara-staging.railway.app
+    description: Staging (Railway)
+  - url: https://clara.railway.app
+    description: Production (Railway)
+
+tags:
+  - name: demo
+    description: Demo session management (operator creates, visitor reads)
+  - name: chat
+    description: Chat message send and history retrieval
+  - name: leads
+    description: Lead capture and management (operator-only for read/delete)
+  - name: admin
+    description: Operator-only administrative operations
+
+paths:
+
+  # ─── POST /api/demo ────────────────────────────────────────────────────────
+
+  /api/demo:
+    post:
+      summary: Create a demo session
+      description: |
+        Creates a new demo session linked to a HubSpot company ID.
+        Returns a UUID that the operator pastes into cold outreach emails.
+
+        A new session is ALWAYS created — sessions are not deduplicated per company.
+        Multiple sessions per company ID are intentional (enables A/B testing).
+
+        The business profile is NOT fetched at session creation — it is fetched lazily
+        on the first visitor chat message to avoid wasted Hunter API calls for unopened links.
+      operationId: createDemoSession
+      tags: [demo]
+      security:
+        - operatorBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDemoRequest"
+            example:
+              hubspot_company_id: "123456789"
+      responses:
+        "201":
+          description: Demo session created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateDemoResponse"
+              example:
+                sessionId: "550e8400-e29b-41d4-a716-446655440000"
+                uuid: "550e8400-e29b-41d4-a716-446655440000"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+    get:
+      summary: Get demo session metadata
+      description: |
+        Returns metadata for a demo session by UUID.
+        Increments `view_count` on every call (used to track prospect engagement).
+
+        This endpoint is public — anyone with the session UUID can call it.
+        The UUID acts as the capability token.
+      operationId: getDemoSession
+      tags: [demo]
+      security: []
+      parameters:
+        - name: uuid
+          in: query
+          required: true
+          description: The demo session UUID (from the /demo/[uuid] URL)
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        "200":
+          description: Session metadata returned successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetDemoResponse"
+              example:
+                sessionId: "550e8400-e29b-41d4-a716-446655440000"
+                businessName: "Maria's Hair Studio"
+                viewCount: 3
+                messageCount: 7
+                createdAt: "2026-03-24T10:00:00.000Z"
+                lastActiveAt: "2026-03-24T10:15:00.000Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ─── POST /api/chat ───────────────────────────────────────────────────────
+
+  /api/chat:
+    post:
+      summary: Send a chat message and get Clara's reply
+      description: |
+        Sends a visitor message to Clara and returns the assistant's reply.
+
+        On the first message, Clara fetches the business profile from Hunter API
+        (5s timeout, falls back to "This Business" if unreachable). Subsequent
+        messages use the cached business name from the session row.
+
+        Rate limits enforced:
+        - 10 requests/minute/IP (sliding window)
+        - 20 messages/session/hour (sliding window, checked against DB)
+        - 200 messages/session lifetime hard cap (checked against session.messageCount)
+
+        Returns 429 for any of these conditions. The 200-cap response includes a
+        user-friendly message: "This demo has reached its message limit."
+      operationId: sendChatMessage
+      tags: [chat]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendMessageRequest"
+            example:
+              sessionId: "550e8400-e29b-41d4-a716-446655440000"
+              message: "What are your hours on Saturdays?"
+      responses:
+        "200":
+          description: Assistant reply generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendMessageResponse"
+              example:
+                reply: "We're open Saturdays from 9am to 6pm! Want to book an appointment?"
+                messageId: "660e8400-e29b-41d4-a716-446655440001"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: Session not found or expired (soft-deleted)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                error: "Session not found"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          description: LLM or internal error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                error: "Agent failed to generate a response"
+
+    get:
+      summary: Get chat history for a session
+      description: |
+        Returns the full message history for a session, ordered oldest-first.
+        Used by the frontend to restore conversation state on page reload.
+
+        This endpoint is public — anyone with the session UUID can call it.
+      operationId: getChatHistory
+      tags: [chat]
+      security: []
+      parameters:
+        - name: sessionId
+          in: query
+          required: true
+          description: The demo session UUID
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        "200":
+          description: Message history returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetChatHistoryResponse"
+              example:
+                sessionId: "550e8400-e29b-41d4-a716-446655440000"
+                messages:
+                  - id: "aaa-111"
+                    role: "user"
+                    content: "What are your hours?"
+                    createdAt: "2026-03-24T10:10:00.000Z"
+                  - id: "bbb-222"
+                    role: "assistant"
+                    content: "We're open Monday to Saturday, 9am to 7pm!"
+                    createdAt: "2026-03-24T10:10:02.000Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ─── POST /api/leads ──────────────────────────────────────────────────────
+
+  /api/leads:
+    post:
+      summary: Capture a visitor lead
+      description: |
+        Records a visitor's contact information as a lead capture event.
+
+        The `hubspot_company_id` is NEVER accepted from the client — it is read from
+        the session row in the database. This prevents cross-tenant data injection.
+
+        One session can have multiple lead rows (visitor submits more than once, or
+        multiple people use the same link). No UNIQUE constraint on session_id.
+
+        Rate limits:
+        - 5 requests/minute/IP
+        - 10 lead captures/session/lifetime (checked against DB count)
+      operationId: captureLead
+      tags: [leads]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CaptureLeadRequest"
+            example:
+              sessionId: "550e8400-e29b-41d4-a716-446655440000"
+              name: "James Chen"
+              contact: "james@example.com"
+              message: "Interested in beard trim pricing"
+      responses:
+        "201":
+          description: Lead captured successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaptureLeadResponse"
+              example:
+                leadId: "770e8400-e29b-41d4-a716-446655440002"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: Session not found or expired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                error: "Session not found"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+    get:
+      summary: List lead captures for a company (operator-only)
+      description: |
+        Returns all lead capture events for a given HubSpot company ID,
+        ordered by most recent first.
+
+        This endpoint is operator-only and requires bearer token auth.
+        Lead data contains PII (name and contact info) — never return it without auth.
+      operationId: getLeads
+      tags: [leads]
+      security:
+        - operatorBearer: []
+      parameters:
+        - name: company
+          in: query
+          required: true
+          description: The HubSpot company ID to query leads for
+          schema:
+            type: string
+            maxLength: 64
+          example: "123456789"
+      responses:
+        "200":
+          description: Leads returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetLeadsResponse"
+              example:
+                leads:
+                  - id: "770e8400-e29b-41d4-a716-446655440002"
+                    sessionId: "550e8400-e29b-41d4-a716-446655440000"
+                    name: "James Chen"
+                    contact: "james@example.com"
+                    message: "Interested in beard trim pricing"
+                    createdAt: "2026-03-24T10:20:00.000Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ─── DELETE /api/leads/{id} ───────────────────────────────────────────────
+
+  /api/leads/{id}:
+    delete:
+      summary: Delete a lead (GDPR erasure)
+      description: |
+        Hard-deletes a single lead row by ID. This is the GDPR Art. 17 right-to-erasure
+        implementation for individual lead records.
+
+        Hard delete (not soft delete) — lead PII must be fully removed. No recovery
+        after this operation.
+
+        Operator-only. Returns 404 if the lead ID does not exist (idempotent-safe —
+        a second call to delete an already-deleted lead returns 404, not an error).
+      operationId: deleteLead
+      tags: [leads]
+      security:
+        - operatorBearer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The lead UUID to delete
+          schema:
+            type: string
+            format: uuid
+          example: "770e8400-e29b-41d4-a716-446655440002"
+      responses:
+        "200":
+          description: Lead deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteLeadResponse"
+              example:
+                deleted: true
+                id: "770e8400-e29b-41d4-a716-446655440002"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ─── POST /api/admin/cleanup ──────────────────────────────────────────────
+
+  /api/admin/cleanup:
+    post:
+      summary: Run session expiry cleanup (operator-only)
+      description: |
+        Soft-deletes demo sessions that have been inactive for more than 30 days.
+        Sets `deleted_at` on eligible sessions. Does NOT hard-delete chat messages
+        or leads — those are retained for analytics.
+
+        Intended to be called by a Railway cron job or GitHub Actions scheduled workflow
+        on a daily schedule. Can also be called manually by the operator.
+
+        Idempotent — running multiple times on the same day has no additional effect
+        (sessions already soft-deleted are not double-processed).
+
+        Returns the count of sessions archived and the cutoff date used.
+      operationId: runCleanup
+      tags: [admin]
+      security:
+        - operatorBearer: []
+      responses:
+        "200":
+          description: Cleanup completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CleanupResponse"
+              example:
+                archivedCount: 3
+                cutoffDate: "2026-02-22T00:00:00.000Z"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+# ─── Components ────────────────────────────────────────────────────────────────
+
+components:
+
+  securitySchemes:
+    operatorBearer:
+      type: http
+      scheme: bearer
+      description: |
+        Static API key set in `CLARA_OPERATOR_API_KEY` environment variable.
+        Generate with: `openssl rand -base64 32`
+        Compared using `crypto.timingSafeEqual` — not string equality.
+
+  schemas:
+
+    # ─── Request schemas ────────────────────────────────────────────────────
+
+    CreateDemoRequest:
+      type: object
+      required: [hubspot_company_id]
+      additionalProperties: false
+      properties:
+        hubspot_company_id:
+          type: string
+          description: HubSpot company ID from Hunter's CRM. Alphanumeric plus hyphens/underscores.
+          pattern: "^[a-zA-Z0-9\\-_]{1,64}$"
+          maxLength: 64
+          example: "123456789"
+
+    SendMessageRequest:
+      type: object
+      required: [sessionId, message]
+      additionalProperties: false
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+          description: The demo session UUID (from URL or prior API response)
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        message:
+          type: string
+          description: The visitor's message text. Whitespace-trimmed before processing.
+          minLength: 1
+          maxLength: 2000
+          example: "What are your hours on Saturdays?"
+
+    CaptureLeadRequest:
+      type: object
+      required: [sessionId, name, contact]
+      additionalProperties: false
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+          description: The session in which the lead capture was triggered
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        name:
+          type: string
+          description: Visitor's self-reported name. Free-text, not normalized.
+          minLength: 1
+          maxLength: 200
+          example: "James Chen"
+        contact:
+          type: string
+          description: |
+            Visitor's email address or phone number. Single field — visitor provides
+            whichever they prefer. Not validated as email or phone in v1.
+          minLength: 1
+          maxLength: 200
+          example: "james@example.com"
+        message:
+          type: string
+          description: Optional note from the visitor alongside their contact info
+          maxLength: 1000
+          example: "Interested in beard trim pricing"
+
+    # ─── Response schemas ───────────────────────────────────────────────────
+
+    CreateDemoResponse:
+      type: object
+      required: [sessionId, uuid]
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+          description: The new demo session UUID. Use this to build the demo URL.
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        uuid:
+          type: string
+          format: uuid
+          description: |
+            Alias for sessionId — both fields contain the same value. `uuid` is provided
+            for URL construction clarity: `/demo/${uuid}`.
+          example: "550e8400-e29b-41d4-a716-446655440000"
+
+    GetDemoResponse:
+      type: object
+      required: [sessionId, businessName, viewCount, messageCount, createdAt, lastActiveAt]
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        businessName:
+          type: string
+          description: |
+            Cached business name from Hunter API. "This Business" if Hunter was unreachable
+            or first message has not been sent yet (profile fetched on first chat, not on
+            session creation).
+          example: "Maria's Hair Studio"
+        viewCount:
+          type: integer
+          description: Number of times this session has been viewed (incremented on this call)
+          minimum: 0
+          example: 3
+        messageCount:
+          type: integer
+          description: Number of user messages sent in this session
+          minimum: 0
+          example: 7
+        createdAt:
+          type: string
+          format: date-time
+          description: ISO-8601 UTC timestamp of session creation
+          example: "2026-03-24T10:00:00.000Z"
+        lastActiveAt:
+          type: string
+          format: date-time
+          description: ISO-8601 UTC timestamp of last chat message
+          example: "2026-03-24T10:15:00.000Z"
+
+    SendMessageResponse:
+      type: object
+      required: [reply, messageId]
+      properties:
+        reply:
+          type: string
+          description: Clara's response text. Plain text, no HTML or Markdown.
+          example: "We're open Saturdays from 9am to 6pm! Want to book an appointment?"
+        messageId:
+          type: string
+          format: uuid
+          description: UUID of the assistant message row in chat_messages (for client-side keying)
+          example: "660e8400-e29b-41d4-a716-446655440001"
+
+    GetChatHistoryResponse:
+      type: object
+      required: [sessionId, messages]
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        messages:
+          type: array
+          description: Full message history ordered oldest-first
+          items:
+            $ref: "#/components/schemas/ChatMessageSummary"
+
+    ChatMessageSummary:
+      type: object
+      required: [id, role, content, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "aaa-111-222"
+        role:
+          type: string
+          enum: [user, assistant]
+          example: "assistant"
+        content:
+          type: string
+          example: "We're open Monday to Saturday, 9am to 7pm!"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-03-24T10:10:02.000Z"
+
+    CaptureLeadResponse:
+      type: object
+      required: [leadId]
+      properties:
+        leadId:
+          type: string
+          format: uuid
+          description: UUID of the new lead record
+          example: "770e8400-e29b-41d4-a716-446655440002"
+
+    GetLeadsResponse:
+      type: object
+      required: [leads]
+      properties:
+        leads:
+          type: array
+          description: Lead capture events for the company, ordered by most recent first
+          items:
+            $ref: "#/components/schemas/LeadSummary"
+
+    LeadSummary:
+      type: object
+      required: [id, sessionId, name, contact, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "770e8400-e29b-41d4-a716-446655440002"
+        sessionId:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        name:
+          type: string
+          example: "James Chen"
+        contact:
+          type: string
+          description: Email or phone number provided by the visitor
+          example: "james@example.com"
+        message:
+          type: string
+          nullable: true
+          example: "Interested in beard trim pricing"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-03-24T10:20:00.000Z"
+
+    DeleteLeadResponse:
+      type: object
+      required: [deleted, id]
+      properties:
+        deleted:
+          type: boolean
+          enum: [true]
+          example: true
+        id:
+          type: string
+          format: uuid
+          description: The ID of the deleted lead
+          example: "770e8400-e29b-41d4-a716-446655440002"
+
+    CleanupResponse:
+      type: object
+      required: [archivedCount, cutoffDate]
+      properties:
+        archivedCount:
+          type: integer
+          description: Number of sessions soft-deleted in this run
+          minimum: 0
+          example: 3
+        cutoffDate:
+          type: string
+          format: date-time
+          description: The ISO-8601 date used as the 30-day inactivity threshold
+          example: "2026-02-22T00:00:00.000Z"
+
+    ApiError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Human-readable error message. Never includes stack traces or internal IDs.
+          example: "Session not found"
+
+  responses:
+    BadRequest:
+      description: Invalid request — missing or malformed input
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+          examples:
+            missingField:
+              summary: Missing required field
+              value:
+                error: "Missing required field: hubspot_company_id"
+            invalidFormat:
+              summary: Invalid field format
+              value:
+                error: "Invalid sessionId format"
+            messageTooLong:
+              summary: Message exceeds max length
+              value:
+                error: "Message too long (max 2000 characters)"
+
+    Unauthorized:
+      description: Missing or invalid operator API key
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+          example: Bearer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+          example:
+            error: "Unauthorized"
+
+    NotFound:
+      description: Resource not found — session UUID does not exist or has been soft-deleted
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+          example:
+            error: "Session not found"
+
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying
+          schema:
+            type: integer
+          example: 60
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+          examples:
+            ipLimit:
+              summary: Per-IP rate limit
+              value:
+                error: "Rate limit exceeded. Try again in 60 seconds."
+            sessionHourly:
+              summary: Per-session hourly limit
+              value:
+                error: "This session has reached its hourly message limit. Please try again in an hour."
+            sessionLifetime:
+              summary: Per-session lifetime cap
+              value:
+                error: "This demo has reached its message limit. Please contact us directly."
+            leadSessionCap:
+              summary: Per-session lead submission cap
+              value:
+                error: "Maximum lead submissions reached for this session."
+
+    InternalServerError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+          example:
+            error: "Internal server error"

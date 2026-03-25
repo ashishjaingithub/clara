@@ -1,0 +1,42 @@
+{
+  "mode": "build",
+  "idea": "Clara AI receptionist with a chat/text interface",
+  "started_at": "2026-03-24T00:00:00Z",
+  "current_stage": "complete",
+  "completed_stages": [
+    "pm-agent",
+    "ux-research",
+    "architect",
+    "db-architect",
+    "security",
+    "design",
+    "tech-lead",
+    "devops",
+    "shared-contracts",
+    "backend",
+    "frontend",
+    "code-review",
+    "security-review",
+    "chaos",
+    "qa",
+    "docs",
+    "eval"
+  ],
+  "artifacts": {
+    "PRD.md": ".spec/PRD.md",
+    "ux-research.md": ".spec/ux-research.md",
+    "architecture.md": ".spec/architecture.md",
+    "data-model.md": ".spec/data-model.md",
+    "security-spec.md": ".spec/security-spec.md",
+    "design-spec.md": ".spec/design-spec.md",
+    "technical-spec.md": ".spec/technical-spec.md",
+    "api-spec.yaml": ".spec/api-spec.yaml",
+    "sprint-plan.md": ".spec/sprint-plan.md",
+    "VISION.md": ".spec/VISION.md"
+  },
+  "approved": true,
+  "approved_at": "2026-03-24T00:00:00Z",
+  "build_started_at": "2026-03-24T19:20:00.082Z",
+  "build_approved": true,
+  "build_completed_at": "2026-03-24T20:31:44.761Z"
+}

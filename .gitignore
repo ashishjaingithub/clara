@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build output
+.next/
+out/
+dist/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Coverage
+coverage/
+
+# Playwright
+tests/e2e/test-results/
+playwright-report/
+playwright/.cache/
+
+# TypeScript
+*.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*

@@ -1,0 +1,46 @@
+name: Clara CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Clara/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Clara/**'
+      - '.github/workflows/ci.yml'
+
+defaults:
+  run:
+    working-directory: Clara
+
+jobs:
+  ci:
+    name: Typecheck & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: Clara/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      - name: Run tests
+        run: npm test
+        env:
+          NODE_ENV: test
+          GROQ_API_KEY: test-key
+          DATABASE_PATH: ':memory:'
