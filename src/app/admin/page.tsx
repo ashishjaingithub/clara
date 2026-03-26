@@ -50,7 +50,8 @@ function isAuthorized(key: string | null): boolean {
   const b = Buffer.from(createHash('sha256').update(expected).digest('hex'))
   try {
     return timingSafeEqual(a, b)
-  } catch {
+  } catch (err) {
+    console.debug('timingSafeEqual comparison failed', err)
     return false
   }
 }
@@ -65,7 +66,8 @@ function formatDate(iso: string): string {
       hour: '2-digit',
       minute: '2-digit',
     })
-  } catch {
+  } catch (err) {
+    console.debug('Date formatting failed for ISO string', err)
     return iso
   }
 }

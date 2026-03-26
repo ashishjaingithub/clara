@@ -358,8 +358,9 @@ async function _runReceptionist(input: ReceptionistInput): Promise<ReceptionistR
   try {
     const runTree = getCurrentRunTree()
     langsmithTraceId = runTree?.id ?? null
-  } catch {
+  } catch (err) {
     // Not inside a traceable context (test env or tracing disabled) — safe to ignore
+    console.debug('LangSmith trace ID unavailable (expected in test/non-traced env)', err)
     langsmithTraceId = null
   }
 

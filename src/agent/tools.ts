@@ -13,7 +13,7 @@
 
 import { DynamicStructuredTool } from '@langchain/core/tools'
 import { z } from 'zod'
-import { getAvailableSlots, bookAppointment, upsertContact } from '@agenticlearning/agent-core'
+import { getAvailableSlots, bookAppointment, upsertContact, withRetry } from '@agenticlearning/agent-core'
 import type { EnrichmentProfile } from '@agenticlearning/agent-core'
 
 // ─── Factory ──────────────────────────────────────────────────────────────────
@@ -39,7 +39,11 @@ export function createClaraTools(enrichmentProfile: EnrichmentProfile | null): D
     schema: z.object({}),
     func: async (): Promise<string> => {
       try {
-        const slots = await getAvailableSlots(calendarId, timezone, durationMinutes)
+        // Retry with jitter — calendar API may transiently fail (429 / 5xx)
+        const slots = await withRetry(
+          () => getAvailableSlots(calendarId, timezone, durationMinutes),
+          { maxAttempts: 3, baseDelayMs: 500 },
+        )
         if (slots.length === 0) {
           return 'No available slots found for the next 3 business days. Please ask the visitor to call during business hours.'
         }
@@ -71,15 +75,30 @@ export function createClaraTools(enrichmentProfile: EnrichmentProfile | null): D
     }),
     func: async (input): Promise<string> => {
       try {
-        const result = await bookAppointment({
-          start: input.start,
-          end: input.end,
-          attendeeEmail: input.attendeeEmail,
-          attendeeName: input.attendeeName,
-          calendarId,
-          timezone,
-          description: input.description,
-        })
+        // Retry with jitter — do not retry SLOT_CONFLICT (it is not transient)
+        const result = await withRetry(
+          () => bookAppointment({
+            start: input.start,
+            end: input.end,
+            attendeeEmail: input.attendeeEmail,
+            attendeeName: input.attendeeName,
+            calendarId,
+            timezone,
+            description: input.description,
+          }),
+          {
+            maxAttempts: 3,
+            baseDelayMs: 500,
+            retryOn: (err) => {
+              const msg = err instanceof Error ? err.message : String(err)
+              // SLOT_CONFLICT is deterministic — retrying will not resolve it
+              if (msg.includes('SLOT_CONFLICT')) return false
+              const e = err as { response?: { status?: number } } | undefined
+              const status = e?.response?.status
+              return status === 429 || (status !== undefined && status >= 500)
+            },
+          },
+        )
         if (result.success) {
           return (
             `Appointment booked successfully!\n` +
@@ -116,13 +135,17 @@ export function createClaraTools(enrichmentProfile: EnrichmentProfile | null): D
     }),
     func: async (input): Promise<string> => {
       try {
-        const result = await upsertContact({
-          email: input.email,
-          firstName: input.firstName,
-          lastName: input.lastName,
-          phone: input.phone,
-          notes: input.notes,
-        })
+        // Retry with jitter — HubSpot may transiently rate-limit (429) or be unavailable (5xx)
+        const result = await withRetry(
+          () => upsertContact({
+            email: input.email,
+            firstName: input.firstName,
+            lastName: input.lastName,
+            phone: input.phone,
+            notes: input.notes,
+          }),
+          { maxAttempts: 3, baseDelayMs: 500 },
+        )
         if (result.created) {
           return `Contact created successfully. ID: ${result.contactId}. The team will follow up with ${input.email}.`
         }

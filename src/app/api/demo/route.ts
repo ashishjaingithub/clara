@@ -29,7 +29,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let body: unknown
   try {
     body = await request.json()
-  } catch {
+  } catch (err) {
+    console.warn('Demo API: failed to parse JSON body', err)
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 

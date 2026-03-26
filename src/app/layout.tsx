@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { checkProductionEnv } from '@/lib/startup'
+import { ErrorBoundary } from '@/lib/error-capture/ErrorBoundary'
+import { ErrorCaptureProvider } from '@/lib/error-capture/ErrorCaptureProvider'
 
 checkProductionEnv()
 
@@ -16,7 +18,12 @@ export default function RootLayout({
 }>): JSX.Element {
   return (
     <html lang="en">
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        <ErrorBoundary project="clara">
+          {children}
+        </ErrorBoundary>
+        <ErrorCaptureProvider />
+      </body>
     </html>
   )
 }

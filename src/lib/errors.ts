@@ -205,6 +205,10 @@ export function toErrorResponse(err: unknown): Response {
   }
   // Unknown error — never expose internals in production
   process.stderr.write(`[Clara] [UNHANDLED_ERROR] ${err instanceof Error ? err.stack ?? err.message : String(err)}\n`)
+  // Lazy import to avoid circular dependency (errors.ts is imported by error-tracker.ts)
+  import('./error-tracker').then(({ trackError }) => {
+    trackError(err, { operation: 'api-route-unhandled' })
+  }).catch((importErr) => { process.stderr.write(`[Clara] Failed to load error tracker: ${importErr instanceof Error ? importErr.message : String(importErr)}\n`) })
   return Response.json(
     { error: 'Internal server error', code: 'INTERNAL_ERROR' },
     { status: 500 },

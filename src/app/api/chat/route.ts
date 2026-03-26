@@ -11,6 +11,7 @@ import {
   getClientIP,
   SESSION_MESSAGE_HARD_CAP,
 } from '@/lib/rate-limit'
+import { toErrorResponse, LLMError } from '@/lib/errors'
 
 // POST /api/chat — visitor sends a message and gets Clara's reply
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -31,7 +32,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let body: unknown
   try {
     body = await request.json()
-  } catch {
+  } catch (err) {
+    console.warn('Chat API: failed to parse JSON body', err)
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
@@ -111,9 +113,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       businessProfile: cachedProfile,
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    process.stderr.write(`[Clara] Receptionist agent error: ${message}\n`)
-    return NextResponse.json({ error: 'Agent failed to generate a response' }, { status: 500 })
+    const lllmErr = new LLMError('Agent failed to generate a response', err)
+    process.stderr.write(`[Clara] Receptionist agent error: ${lllmErr.context?.['cause'] ?? String(err)}\n`)
+    return NextResponse.json(lllmErr.toJSON(), { status: lllmErr.statusCode })
   }
 
   // 8. Check for [NEEDS_FOLLOWUP] signal and strip it from the visible reply

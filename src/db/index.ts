@@ -33,9 +33,10 @@ function runMigrations(db: Database.Database): void {
     migrationFiles = readdirSync(migrationsDir)
       .filter(f => f.endsWith('.sql'))
       .sort()
-  } catch {
+  } catch (err) {
     // In test environments with :memory: DB, migrations dir may not resolve the same way.
     // Fall back to inline DDL to ensure tests have a working schema.
+    console.debug('Migration dir read failed, falling back to inline DDL', err)
     runInlineFallback(db)
     return
   }

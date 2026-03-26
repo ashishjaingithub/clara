@@ -1,0 +1,49 @@
+{
+  "project": "Clara",
+  "phase": "Iterate",
+  "slos": [
+    {
+      "name": "Chat response latency p95",
+      "key": "chat_response_latency_p95",
+      "target": 3000,
+      "direction": "lower_better",
+      "unit": "ms",
+      "description": "p95 time from user message to first token of agent response. Clara is a real-time receptionist — slow responses break the conversational UX.",
+      "dataSource": "Next.js API route timing in /api/chat — log start/end timestamps",
+      "warningAt": 2000
+    },
+    {
+      "name": "Tool call success rate",
+      "key": "tool_call_success_rate",
+      "target": 0.95,
+      "direction": "higher_better",
+      "unit": "%",
+      "description": "Fraction of HubSpot and Calendar tool calls that succeed without error. Failures leave leads unrecorded or bookings unbooking.",
+      "dataSource": "Tool call result logging in agent/tools.ts",
+      "warningAt": 0.98
+    },
+    {
+      "name": "Booking confirmation rate",
+      "key": "booking_confirmation_rate",
+      "target": 0.90,
+      "direction": "higher_better",
+      "unit": "%",
+      "description": "Fraction of attempted calendar bookings where Google Calendar confirmation is received. Failures mean the lead believes they booked but didn't.",
+      "dataSource": "CLARA_CONFIRM_BOOKING gate + calendar tool response tracking",
+      "warningAt": 0.95
+    },
+    {
+      "name": "HubSpot contact creation success rate",
+      "key": "hubspot_create_success_rate",
+      "target": 0.95,
+      "direction": "higher_better",
+      "unit": "%",
+      "description": "Fraction of attempted HubSpot contact upserts that succeed. Failed writes lose lead data permanently.",
+      "dataSource": "CLARA_CONFIRM_HUBSPOT_WRITE gate + HubSpot tool response tracking",
+      "warningAt": 0.98
+    }
+  ],
+  "reviewCadence": "monthly",
+  "lastReviewed": "2026-03-26",
+  "note": "Clara is Iterate-phase — no live traffic yet. SLOs defined for when first users arrive. Targets are estimates based on similar chatbot benchmarks; ratchet after first 100 conversations."
+}
