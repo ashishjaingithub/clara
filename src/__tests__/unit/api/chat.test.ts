@@ -321,20 +321,22 @@ describe('POST /api/chat', () => {
 
   // ── Agent errors ─────────────────────────────────────────────────────────────
 
-  it('returns 500 when the receptionist agent throws an error', async () => {
+  it('returns 502 when the receptionist agent throws an error', async () => {
     mockRunReceptionist.mockRejectedValue(new Error('LLM connection timeout'))
     const req = makePostRequest({ sessionId: VALID_SESSION_UUID, message: 'Hello' })
     const res = await POST(req)
-    expect(res.status).toBe(500)
+    // LLMError wraps agent failures — 502 Bad Gateway is correct for upstream LLM failure
+    expect(res.status).toBe(502)
     const body = await res.json()
     expect(body.error).toBeTruthy()
   })
 
-  it('returns 500 when the agent throws a non-Error value', async () => {
+  it('returns 502 when the agent throws a non-Error value', async () => {
     mockRunReceptionist.mockRejectedValue('something went wrong')
     const req = makePostRequest({ sessionId: VALID_SESSION_UUID, message: 'Hello' })
     const res = await POST(req)
-    expect(res.status).toBe(500)
+    // LLMError wraps agent failures — 502 Bad Gateway is correct for upstream LLM failure
+    expect(res.status).toBe(502)
   })
 })
 

@@ -11,6 +11,8 @@ vi.mock('@agenticlearning/agent-core', () => ({
   getAvailableSlots: mockGetAvailableSlots,
   bookAppointment: mockBookAppointment,
   upsertContact: mockUpsertContact,
+  // withRetry is a pass-through in tests — the mocked fns already control outcomes
+  withRetry: async <T>(fn: () => Promise<T>) => fn(),
 }))
 
 import { createClaraTools } from '../../../agent/tools'
