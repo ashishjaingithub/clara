@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@agenticlearning/agent-core':
-        specifier: file:../packages/agent-core
-        version: file:../packages/agent-core
+        specifier: file:./packages/agent-core
+        version: file:packages/agent-core
       '@langchain/core':
         specifier: ^1.1.31
         version: 1.1.36
@@ -84,6 +84,9 @@ importers:
       postcss:
         specifier: ^8.5.3
         version: 8.5.8
+      prettier:
+        specifier: ^3.8.1
+        version: 3.8.1
       tailwindcss:
         specifier: ^3.4.17
         version: 3.4.19(tsx@4.21.0)
@@ -99,8 +102,8 @@ importers:
 
 packages:
 
-  '@agenticlearning/agent-core@file:../packages/agent-core':
-    resolution: {directory: ../packages/agent-core, type: directory}
+  '@agenticlearning/agent-core@file:packages/agent-core':
+    resolution: {directory: packages/agent-core, type: directory}
 
   '@alloc/quick-lru@5.2.0':
     resolution: {integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==}
@@ -2689,6 +2692,11 @@ packages:
     resolution: {integrity: sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g==}
     engines: {node: '>= 0.8.0'}
 
+  prettier@3.8.1:
+    resolution: {integrity: sha512-UOnG6LftzbdaHZcKoPFtOcCKztrQ57WkHDeRD9t/PTQtmT0NHSeWWepj6pS0z/N7+08BHFDQVUrfmfMRcZwbMg==}
+    engines: {node: '>=14'}
+    hasBin: true
+
   prop-types@15.8.1:
     resolution: {integrity: sha512-oj87CgZICdulUohogVAR7AjlC0327U4el4L6eAvOqCeudMDVU0NThNaV+b9Df4dXgSP1gXMTnPdhfe/2qDH5cg==}
 
@@ -3237,7 +3245,7 @@ packages:
 
 snapshots:
 
-  '@agenticlearning/agent-core@file:../packages/agent-core':
+  '@agenticlearning/agent-core@file:packages/agent-core':
     dependencies:
       '@hubspot/api-client': 13.5.0
       googleapis: 171.4.0
@@ -5700,6 +5708,8 @@ snapshots:
       tunnel-agent: 0.6.0
 
   prelude-ls@1.2.1: {}
+
+  prettier@3.8.1: {}
 
   prop-types@15.8.1:
     dependencies:
