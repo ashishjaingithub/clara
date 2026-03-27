@@ -62,18 +62,30 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     )
   }
 
-  const { hubspot_company_id } = body as { hubspot_company_id: string }
+  const typedBody = body as { hubspot_company_id: string; business_profile?: Record<string, unknown> }
+  const { hubspot_company_id } = typedBody
 
   // 4. Validate format: alphanumeric + hyphens/underscores, 1–64 chars
   if (!/^[a-zA-Z0-9\-_]{1,64}$/.test(hubspot_company_id)) {
     return NextResponse.json({ error: 'Invalid hubspot_company_id format' }, { status: 400 })
   }
 
-  // 5. Pre-fetch business profile from Hunter (best-effort — graceful fallback)
-  const profileJson = await prefetchProfile(hubspot_company_id)
-  const businessName = profileJson
-    ? (JSON.parse(profileJson) as { companyName?: string }).companyName ?? null
-    : null
+  // 5. Use profile from request body (preferred — Hunter sends enrichment data),
+  //    or fall back to fetching from Hunter API (works when Clara can reach Hunter)
+  let profileJson: string | null = null
+  let businessName: string | null = null
+
+  if (typedBody.business_profile && typeof typedBody.business_profile === 'object') {
+    // Hunter sent the profile inline — no fetch needed
+    profileJson = JSON.stringify(typedBody.business_profile)
+    businessName = (typedBody.business_profile as { companyName?: string }).companyName ?? null
+  } else {
+    // Fall back to fetching from Hunter API (works in local dev)
+    profileJson = await prefetchProfile(hubspot_company_id)
+    businessName = profileJson
+      ? (JSON.parse(profileJson) as { companyName?: string }).companyName ?? null
+      : null
+  }
 
   // 6. Always create a new session (PRD US-07 AC: new session per call, no deduplication)
   const sessionId = uuidv4()
