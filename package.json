@@ -53,7 +53,7 @@
     "format:check": "prettier --check src/",
     "lint": "next lint",
     "smoke": "node scripts/smoke.mjs",
-    "start": "next start -p 3002",
+    "start": "next start",
     "test": "mkdir -p coverage/.tmp && vitest run",
     "test:e2e:prod": "playwright test",
     "test:ui": "vitest --ui",
