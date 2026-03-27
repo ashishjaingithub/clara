@@ -1,22 +1,40 @@
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
-import { readFileSync, readdirSync } from 'fs'
-import { join } from 'path'
+import { readFileSync, readdirSync, existsSync, mkdirSync } from 'fs'
+import { join, dirname } from 'path'
 import * as schema from './schema'
 
 const databasePath = process.env.DATABASE_PATH ?? './clara.db'
 
-const sqlite = new Database(databasePath)
-sqlite.pragma('journal_mode = WAL')
-sqlite.pragma('foreign_keys = ON')
-sqlite.pragma('busy_timeout = 5000')
+// Lazy-initialized DB connection. During Next.js build (collecting page data),
+// the /data volume doesn't exist yet. Deferring initialization until first
+// actual query prevents build-time crashes.
+let _db: ReturnType<typeof drizzle> | null = null
 
-// Run file-based migrations on startup (idempotent — IF NOT EXISTS / ADD COLUMN IF NOT EXISTS)
-runMigrations(sqlite)
+function getDb() {
+  if (_db) return _db
 
-function runMigrations(db: Database.Database): void {
+  // Ensure the directory exists (Railway volume mounts at /data)
+  const dir = dirname(databasePath)
+  if (dir !== '.' && !existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+  }
+
+  const sqlite = new Database(databasePath)
+  sqlite.pragma('journal_mode = WAL')
+  sqlite.pragma('foreign_keys = ON')
+  sqlite.pragma('busy_timeout = 5000')
+
+  // Run file-based migrations on startup (idempotent — IF NOT EXISTS / ADD COLUMN IF NOT EXISTS)
+  runMigrations(sqlite)
+
+  _db = drizzle(sqlite, { schema })
+  return _db
+}
+
+function runMigrations(sqliteDb: Database.Database): void {
   // Create migrations tracking table
-  db.exec(`
+  sqliteDb.exec(`
     CREATE TABLE IF NOT EXISTS _migrations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       filename TEXT NOT NULL UNIQUE,
@@ -36,18 +54,18 @@ function runMigrations(db: Database.Database): void {
   } catch (err) {
     // In test environments with :memory: DB, migrations dir may not resolve the same way.
     // Fall back to inline DDL to ensure tests have a working schema.
-    console.debug('Migration dir read failed, falling back to inline DDL', err)
-    runInlineFallback(db)
+    process.stderr.write(`[Clara] Migration dir read failed, falling back to inline DDL: ${err}\n`)
+    runInlineFallback(sqliteDb)
     return
   }
 
   for (const filename of migrationFiles) {
-    const already = db.prepare('SELECT id FROM _migrations WHERE filename = ?').get(filename)
+    const already = sqliteDb.prepare('SELECT id FROM _migrations WHERE filename = ?').get(filename)
     if (already) continue
 
     const sql = readFileSync(join(migrationsDir, filename), 'utf-8')
-    db.exec(sql)
-    db.prepare('INSERT INTO _migrations (filename) VALUES (?)').run(filename)
+    sqliteDb.exec(sql)
+    sqliteDb.prepare('INSERT INTO _migrations (filename) VALUES (?)').run(filename)
   }
 }
 
@@ -55,17 +73,18 @@ function runMigrations(db: Database.Database): void {
  * Fallback DDL for in-memory test databases where file paths may not resolve.
  * Mirrors the full target schema after all migrations.
  */
-function runInlineFallback(db: Database.Database): void {
-  db.exec(`
+function runInlineFallback(sqliteDb: Database.Database): void {
+  sqliteDb.exec(`
     CREATE TABLE IF NOT EXISTS demo_sessions (
-      id                  TEXT PRIMARY KEY,
-      hubspot_company_id  TEXT NOT NULL,
-      business_name       TEXT,
-      created_at          TEXT NOT NULL DEFAULT (datetime('now')),
-      last_active_at      TEXT NOT NULL DEFAULT (datetime('now')),
-      view_count          INTEGER NOT NULL DEFAULT 0,
-      message_count       INTEGER NOT NULL DEFAULT 0,
-      deleted_at          TEXT
+      id                    TEXT PRIMARY KEY,
+      hubspot_company_id    TEXT NOT NULL,
+      business_name         TEXT,
+      business_profile_json TEXT,
+      created_at            TEXT NOT NULL DEFAULT (datetime('now')),
+      last_active_at        TEXT NOT NULL DEFAULT (datetime('now')),
+      view_count            INTEGER NOT NULL DEFAULT 0,
+      message_count         INTEGER NOT NULL DEFAULT 0,
+      deleted_at            TEXT
     );
 
     CREATE TABLE IF NOT EXISTS chat_messages (
@@ -89,5 +108,20 @@ function runInlineFallback(db: Database.Database): void {
   `)
 }
 
-export const db = drizzle(sqlite, { schema })
-export type DB = typeof db
+// Proxy object that lazily initializes the DB on first access.
+// During Next.js build, API routes are statically analyzed but the /data
+// volume doesn't exist yet. The proxy defers initialization until runtime.
+type DrizzleDB = ReturnType<typeof drizzle<typeof schema>>
+
+export const db: DrizzleDB = new Proxy({} as DrizzleDB, {
+  get(_target, prop: string | symbol) {
+    const realDb = getDb()
+    const value = (realDb as unknown as Record<string | symbol, unknown>)[prop]
+    if (typeof value === 'function') {
+      return (value as Function).bind(realDb)
+    }
+    return value
+  },
+})
+
+export type DB = DrizzleDB
