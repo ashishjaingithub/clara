@@ -23,6 +23,11 @@ export default defineConfig({
         'src/__tests__/**',
         'src/app/layout.tsx',
         'src/app/page.tsx',
+        'src/app/demo/**',           // Client components — tested via E2E
+        'src/app/admin/**',          // Client components — tested via E2E
+        'src/components/**',         // React UI components — tested via E2E
+        'src/lib/error-capture/**',  // Client-side error boundary — tested via E2E
+        'src/types/index.ts',        // Pure type definitions — no runtime code
       ],
       thresholds: {
         statements: 70,

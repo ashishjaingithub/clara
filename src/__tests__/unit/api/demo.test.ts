@@ -15,12 +15,13 @@ import { NextRequest } from 'next/server'
  */
 
 // ── Hoist mock functions so they are available inside vi.mock() factories ─────
-const { mockInsert, mockUpdate, mockFindFirst, mockDemoCreateLimiter, mockDemoReadLimiter } = vi.hoisted(() => ({
+const { mockInsert, mockUpdate, mockFindFirst, mockDemoCreateLimiter, mockDemoReadLimiter, mockFetchBusinessProfile } = vi.hoisted(() => ({
   mockInsert: vi.fn(),
   mockUpdate: vi.fn(),
   mockFindFirst: vi.fn(),
   mockDemoCreateLimiter: vi.fn().mockReturnValue({ allowed: true }),
   mockDemoReadLimiter: vi.fn().mockReturnValue({ allowed: true }),
+  mockFetchBusinessProfile: vi.fn().mockResolvedValue({ companyId: 'test', companyName: 'This Business' }),
 }))
 
 // ── DB mock ───────────────────────────────────────────────────────────────────
@@ -41,6 +42,11 @@ vi.mock('@/lib/rate-limit', () => ({
   demoCreateLimiter: { check: mockDemoCreateLimiter },
   demoReadLimiter: { check: mockDemoReadLimiter },
   getClientIP: vi.fn().mockReturnValue('203.0.113.1'),
+}))
+
+// ── Receptionist mock (for prefetchProfile) ─────────────────────────────────
+vi.mock('@/agent/receptionist', () => ({
+  fetchBusinessProfile: mockFetchBusinessProfile,
 }))
 
 // Import AFTER mocks are registered
@@ -192,6 +198,84 @@ describe('POST /api/demo', () => {
     )
     const res = await POST(req)
     expect(res.status).toBe(201)
+  })
+
+  // ── Inline business profile ─────────────────────────────────────────────────
+
+  it('stores inline business_profile when provided', async () => {
+    const profile = {
+      companyId: 'inline-001',
+      companyName: 'Bay Area Plumbing',
+      phone: '(415) 668-8000',
+      painPoints: [{ problem: 'Missed calls', aiSolution: 'AI receptionist' }],
+    }
+    const req = makePostRequest(
+      { hubspot_company_id: 'inline-001', business_profile: profile },
+      `Bearer ${VALID_KEY}`,
+    )
+    const res = await POST(req)
+    expect(res.status).toBe(201)
+    // Verify the insert was called with the profile JSON
+    expect(mockInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        businessName: 'Bay Area Plumbing',
+        businessProfileJson: JSON.stringify(profile),
+      }),
+    )
+  })
+
+  it('falls back to prefetch when no inline business_profile is provided', async () => {
+    // Mock a successful Hunter fetch
+    mockFetchBusinessProfile.mockResolvedValueOnce({
+      companyId: 'fetch-001',
+      companyName: 'Hunter Fetched Biz',
+    })
+    const req = makePostRequest(
+      { hubspot_company_id: 'fetch-001' },
+      `Bearer ${VALID_KEY}`,
+    )
+    const res = await POST(req)
+    expect(res.status).toBe(201)
+    expect(mockFetchBusinessProfile).toHaveBeenCalledWith('fetch-001')
+    expect(mockInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        businessName: 'Hunter Fetched Biz',
+      }),
+    )
+  })
+
+  it('stores null profile when prefetch returns "This Business" fallback', async () => {
+    mockFetchBusinessProfile.mockResolvedValueOnce({
+      companyId: 'fallback-001',
+      companyName: 'This Business',
+    })
+    const req = makePostRequest(
+      { hubspot_company_id: 'fallback-001' },
+      `Bearer ${VALID_KEY}`,
+    )
+    const res = await POST(req)
+    expect(res.status).toBe(201)
+    expect(mockInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        businessProfileJson: null,
+        businessName: null,
+      }),
+    )
+  })
+
+  it('stores null profile when prefetch throws', async () => {
+    mockFetchBusinessProfile.mockRejectedValueOnce(new Error('Hunter unreachable'))
+    const req = makePostRequest(
+      { hubspot_company_id: 'error-001' },
+      `Bearer ${VALID_KEY}`,
+    )
+    const res = await POST(req)
+    expect(res.status).toBe(201)
+    expect(mockInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        businessProfileJson: null,
+      }),
+    )
   })
 })
 
