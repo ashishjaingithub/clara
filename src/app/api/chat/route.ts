@@ -96,12 +96,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }))
 
   // 6. Rebuild cached business profile from session if available
-  const cachedProfile: BusinessProfile | undefined = session.businessName
-    ? {
-        companyId: session.hubspotCompanyId,
-        companyName: session.businessName,
-      }
-    : undefined
+  //    Prefer full cached profile (pre-fetched at session creation), fall back to name-only
+  let cachedProfile: BusinessProfile | undefined
+  if (session.businessProfileJson) {
+    try {
+      cachedProfile = JSON.parse(session.businessProfileJson) as BusinessProfile
+    } catch {
+      // Corrupted JSON — fall back to name-only
+      cachedProfile = session.businessName
+        ? { companyId: session.hubspotCompanyId, companyName: session.businessName }
+        : undefined
+    }
+  } else if (session.businessName) {
+    cachedProfile = {
+      companyId: session.hubspotCompanyId,
+      companyName: session.businessName,
+    }
+  }
 
   // 7. Run the agent
   let result: Awaited<ReturnType<typeof runReceptionist>>

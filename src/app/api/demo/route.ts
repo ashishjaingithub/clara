@@ -5,6 +5,22 @@ import { db } from '@/db/index'
 import { demoSessions } from '@/db/schema'
 import { requireOperatorAuth } from '@/lib/auth'
 import { demoCreateLimiter, demoReadLimiter, getClientIP } from '@/lib/rate-limit'
+import { fetchBusinessProfile } from '@/agent/receptionist'
+
+/**
+ * Pre-fetch the business profile from Hunter and return it as a JSON string.
+ * Returns null if Hunter is unreachable — Clara will fall back to generic mode.
+ */
+async function prefetchProfile(hubspotCompanyId: string): Promise<string | null> {
+  try {
+    const profile = await fetchBusinessProfile(hubspotCompanyId)
+    // If we only got the fallback ("This Business"), don't cache it
+    if (profile.companyName === 'This Business') return null
+    return JSON.stringify(profile)
+  } catch {
+    return null
+  }
+}
 
 // POST /api/demo — operator-only; creates a new demo session
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -30,7 +46,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     body = await request.json()
   } catch (err) {
-    console.warn('Demo API: failed to parse JSON body', err)
+    process.stderr.write(`[Clara] Demo API: failed to parse JSON body: ${err}\n`)
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
@@ -53,12 +69,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Invalid hubspot_company_id format' }, { status: 400 })
   }
 
-  // 5. Always create a new session (PRD US-07 AC: new session per call, no deduplication)
+  // 5. Pre-fetch business profile from Hunter (best-effort — graceful fallback)
+  const profileJson = await prefetchProfile(hubspot_company_id)
+  const businessName = profileJson
+    ? (JSON.parse(profileJson) as { companyName?: string }).companyName ?? null
+    : null
+
+  // 6. Always create a new session (PRD US-07 AC: new session per call, no deduplication)
   const sessionId = uuidv4()
 
   await db.insert(demoSessions).values({
     id: sessionId,
     hubspotCompanyId: hubspot_company_id,
+    businessName: businessName,
+    businessProfileJson: profileJson,
   })
 
   return NextResponse.json(

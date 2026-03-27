@@ -10,6 +10,7 @@ export const demoSessions = sqliteTable('demo_sessions', {
   lastActiveAt:     text('last_active_at').notNull().$defaultFn(() => new Date().toISOString()),
   viewCount:        integer('view_count').notNull().default(0),
   messageCount:     integer('message_count').notNull().default(0),
+  businessProfileJson: text('business_profile_json'),  // Migration 0006: cached Hunter profile
   deletedAt:        text('deleted_at'),    // Migration 0002: NULL = active session
 })
 
