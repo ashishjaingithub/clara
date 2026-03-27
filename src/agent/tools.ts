@@ -69,7 +69,7 @@ export function createClaraTools(enrichmentProfile: EnrichmentProfile | null): D
     schema: z.object({
       start: z.string().describe('ISO 8601 datetime for appointment start (e.g. 2026-03-25T14:00:00)'),
       end: z.string().describe('ISO 8601 datetime for appointment end (e.g. 2026-03-25T14:30:00)'),
-      attendeeEmail: z.string().email().describe('Email address of the visitor booking the appointment'),
+      attendeeEmail: z.string().min(3).describe('Email address of the visitor booking the appointment'),
       attendeeName: z.string().describe('Full name of the visitor booking the appointment'),
       description: z.string().optional().describe('Optional note about the appointment purpose'),
     }),
@@ -127,7 +127,7 @@ export function createClaraTools(enrichmentProfile: EnrichmentProfile | null): D
       'Use this when the visitor has provided their contact details and wants to be followed up with. ' +
       'Only email is required; other fields are optional.',
     schema: z.object({
-      email: z.string().email().describe('Visitor email address (required)'),
+      email: z.string().min(3).describe('Visitor email address (required)'),
       firstName: z.string().optional().describe("Visitor's first name"),
       lastName: z.string().optional().describe("Visitor's last name"),
       phone: z.string().optional().describe("Visitor's phone number"),
