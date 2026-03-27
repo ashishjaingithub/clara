@@ -167,7 +167,7 @@ describe('detectVertical', () => {
 describe('fetchBusinessProfile', () => {
   beforeEach(() => {
     mockFetch.mockReset()
-    process.env.HUNTER_API_URL = 'http://localhost:3001'
+    process.env.HUNTER_API_URL = 'http://localhost:3011'
     process.env.HUNTER_API_KEY = ''
   })
 
@@ -367,7 +367,7 @@ describe('runReceptionist', () => {
 describe('fetchBusinessProfile — additional branches', () => {
   beforeEach(() => {
     mockFetch.mockReset()
-    process.env.HUNTER_API_URL = 'http://localhost:3001'
+    process.env.HUNTER_API_URL = 'http://localhost:3011'
     process.env.HUNTER_API_KEY = ''
   })
 
@@ -455,7 +455,7 @@ describe('buildSystemPrompt — additional branches', () => {
 describe('fetchBusinessProfile — businessHours array and serviceCategories', () => {
   beforeEach(() => {
     mockFetch.mockReset()
-    process.env.HUNTER_API_URL = 'http://localhost:3001'
+    process.env.HUNTER_API_URL = 'http://localhost:3011'
     process.env.HUNTER_API_KEY = ''
   })
 

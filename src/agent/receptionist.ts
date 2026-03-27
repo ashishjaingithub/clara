@@ -53,7 +53,7 @@ export interface ReceptionistResult {
  * 5-second timeout — degraded mode is correct behaviour; never re-throws.
  */
 async function fetchBusinessProfile(hubspotCompanyId: string): Promise<BusinessProfile> {
-  const hunterApiUrl = process.env.HUNTER_API_URL ?? 'http://localhost:3001'
+  const hunterApiUrl = process.env.HUNTER_API_URL ?? 'http://localhost:3011'
   const hunterApiKey = process.env.HUNTER_API_KEY ?? ''
 
   const url = `${hunterApiUrl}/business/${hubspotCompanyId}/profile`

@@ -26,7 +26,7 @@ cd clara
 cp .env.example .env
 # Fill in:
 #   GROQ_API_KEY     — free at console.groq.com (powers the chat agent)
-#   HUNTER_API_URL   — URL of running Hunter backend (default: http://localhost:3001)
+#   HUNTER_API_URL   — URL of running Hunter backend (default: http://localhost:3011)
 #   HUNTER_API_KEY   — Hunter API key (if auth is enabled)
 npm install
 npm run db:migrate
@@ -120,7 +120,7 @@ clara/
 |----------|----------|---------|---------|
 | `GROQ_API_KEY` | Yes | — | Powers the chat LLM |
 | `ANTHROPIC_API_KEY` | No | — | Reserved for future Haiku fallback |
-| `HUNTER_API_URL` | Yes | `http://localhost:3001` | Where Hunter backend is running |
+| `HUNTER_API_URL` | Yes | `http://localhost:3011` | Where Hunter backend is running |
 | `HUNTER_API_KEY` | No | — | Auth header for Hunter API (if enabled) |
 | `DATABASE_PATH` | No | `./clara.db` | SQLite file path |
 | `GROQ_MODEL` | No | `llama-3.1-8b-instant` | Override the Groq model |

@@ -37,7 +37,7 @@ import type { BusinessProfile } from '../../../agent/receptionist'
 describe('fetchBusinessProfile — uncovered branches', () => {
   beforeEach(() => {
     mockFetch.mockReset()
-    process.env.HUNTER_API_URL = 'http://localhost:3001'
+    process.env.HUNTER_API_URL = 'http://localhost:3011'
     process.env.HUNTER_API_KEY = ''
   })
 
@@ -55,10 +55,10 @@ describe('fetchBusinessProfile — uncovered branches', () => {
 
     // Verify the default URL was used in the fetch call
     const [url] = mockFetch.mock.calls[0] as [string]
-    expect(url).toContain('localhost:3001')
+    expect(url).toContain('localhost:3011')
 
     // Restore
-    process.env.HUNTER_API_URL = 'http://localhost:3001'
+    process.env.HUNTER_API_URL = 'http://localhost:3011'
   })
 
   it('returns techMaturity when present in Hunter API response (line 120)', async () => {
