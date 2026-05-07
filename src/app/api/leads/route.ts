@@ -27,7 +27,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     body = await request.json()
   } catch (err) {
-    console.warn('Leads API: failed to parse JSON body', err)
+    // Invalid JSON body — return 400 (client error, non-critical)
+    void err
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 

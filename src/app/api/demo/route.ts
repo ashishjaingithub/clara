@@ -17,7 +17,9 @@ async function prefetchProfile(hubspotCompanyId: string): Promise<string | null>
     // If we only got the fallback ("This Business"), don't cache it
     if (profile.companyName === 'This Business') return null
     return JSON.stringify(profile)
-  } catch {
+  } catch (err) {
+    // Hunter API unreachable — Clara falls back to generic mode (non-critical)
+    void err
     return null
   }
 }
@@ -130,12 +132,30 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   // 3. Load active session (IDOR gate: only non-deleted sessions, return 404 not 403)
-  const session = await db.query.demoSessions.findFirst({
+  let session = await db.query.demoSessions.findFirst({
     where: (s, { and, eq: eqOp }) => and(eqOp(s.id, uuid), isNull(s.deletedAt)),
   })
 
+  // 4. Auto-provision: if no session exists, try to create one from Hunter's lead data
   if (!session) {
-    return NextResponse.json({ error: 'Demo session not found' }, { status: 404 })
+    const profileJson = await prefetchProfile(uuid)
+    if (profileJson) {
+      const profile = JSON.parse(profileJson) as { companyName?: string }
+      const businessName = profile.companyName ?? null
+      await db.insert(demoSessions).values({
+        id: uuid,
+        hubspotCompanyId: uuid,
+        businessName,
+        businessProfileJson: profileJson,
+      })
+      session = await db.query.demoSessions.findFirst({
+        where: (s, { and, eq: eqOp }) => and(eqOp(s.id, uuid), isNull(s.deletedAt)),
+      })
+    }
+  }
+
+  if (!session) {
+    return NextResponse.json({ error: 'Demo session not found. No matching lead in Hunter.' }, { status: 404 })
   }
 
   // 4. Increment view count

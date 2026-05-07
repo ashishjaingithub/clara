@@ -113,7 +113,6 @@ export default function DemoPage(): JSX.Element {
           setMessages(historyData.messages)
         }
       } catch (err) {
-        console.warn('Demo session load failed', err)
         setSessionError('Failed to load demo session. Please try again.')
       } finally {
         setSessionLoading(false)
@@ -233,7 +232,6 @@ export default function DemoPage(): JSX.Element {
           apiTriggerLead = data.triggerLeadCapture === true
         }
       } catch (err) {
-        console.warn('Chat API request failed', err)
         apiError = 'Sorry, I had trouble connecting. Please try again.'
       }
 
@@ -310,8 +308,7 @@ export default function DemoPage(): JSX.Element {
           }),
         })
       } catch (err) {
-        // Best-effort — lead capture failure is non-fatal
-        console.debug('Lead capture submission failed (non-fatal)', err)
+        // Best-effort — lead capture failure is non-fatal, intentional silent catch
       }
 
       // Return focus to message input

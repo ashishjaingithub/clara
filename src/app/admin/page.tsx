@@ -51,7 +51,7 @@ function isAuthorized(key: string | null): boolean {
   try {
     return timingSafeEqual(a, b)
   } catch (err) {
-    console.debug('timingSafeEqual comparison failed', err)
+    // timingSafeEqual comparison failed — treat as unauthorized
     return false
   }
 }
@@ -67,7 +67,7 @@ function formatDate(iso: string): string {
       minute: '2-digit',
     })
   } catch (err) {
-    console.debug('Date formatting failed for ISO string', err)
+    // Date formatting failed — return raw ISO string as fallback
     return iso
   }
 }
