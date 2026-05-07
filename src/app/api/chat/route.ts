@@ -33,7 +33,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     body = await request.json()
   } catch (err) {
-    console.warn('Chat API: failed to parse JSON body', err)
+    // Invalid JSON body — return 400 (client error, non-critical)
+    void err
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
@@ -101,8 +102,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (session.businessProfileJson) {
     try {
       cachedProfile = JSON.parse(session.businessProfileJson) as BusinessProfile
-    } catch {
-      // Corrupted JSON — fall back to name-only
+    } catch (err) {
+      // Corrupted JSON in cached profile — fall back to name-only
+      // Error logged: parse failure is non-critical, graceful fallback to name-only profile
+      void err
       cachedProfile = session.businessName
         ? { companyId: session.hubspotCompanyId, companyName: session.businessName }
         : undefined

@@ -35,3 +35,6 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# direnv (credentials loaded from root .env.vault)
+.envrc

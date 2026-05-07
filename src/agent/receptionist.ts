@@ -68,7 +68,7 @@ async function fetchBusinessProfile(hubspotCompanyId: string): Promise<BusinessP
     })
 
     if (!response.ok) {
-      console.warn(`[Clara] Hunter API returned ${response.status} for company ${hubspotCompanyId}`)
+      // Hunter API non-OK response — degrade gracefully to generic profile
       return { companyId: hubspotCompanyId, companyName: 'This Business' }
     }
 
@@ -124,7 +124,7 @@ async function fetchBusinessProfile(hubspotCompanyId: string): Promise<BusinessP
       techMaturity: typeof data.techMaturity === 'string' ? data.techMaturity : undefined,
     }
   } catch (err) {
-    console.warn(`[Clara] Could not reach Hunter API: ${err instanceof Error ? err.message : String(err)}`)
+    // Hunter API unreachable — degrade gracefully to generic profile
     return { companyId: hubspotCompanyId, companyName: 'This Business' }
   }
 }
@@ -360,7 +360,6 @@ async function _runReceptionist(input: ReceptionistInput): Promise<ReceptionistR
     langsmithTraceId = runTree?.id ?? null
   } catch (err) {
     // Not inside a traceable context (test env or tracing disabled) — safe to ignore
-    console.debug('LangSmith trace ID unavailable (expected in test/non-traced env)', err)
     langsmithTraceId = null
   }
 

@@ -31,7 +31,7 @@ export function requireOperatorAuth(req: NextRequest): NextResponse | null {
     if (process.env.NODE_ENV === 'production') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    console.warn('[Clara] CLARA_OPERATOR_API_KEY is not set — operator auth bypassed in dev/test')
+    // CLARA_OPERATOR_API_KEY not set — auth bypassed in dev/test
     return null
   }
 
